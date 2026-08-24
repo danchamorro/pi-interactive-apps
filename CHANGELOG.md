@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-08-24
+
+- Add the 25-second demo video and README link.
+- Install from the moving `main` package source by default.
+- Keep Tode support while shortening the README usage example.
+
 ## 0.1.0 - 2026-08-24
 
 - Add project-scoped interactive app sessions on a private tmux server.

@@ -1,6 +1,6 @@
 {
   "name": "pi-interactive-apps",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Persistent, project-scoped interactive terminal apps for Pi",
   "type": "module",
   "license": "MIT",

@@ -168,7 +168,8 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 **Tasks:**
 - [x] Create `/Users/danielchamorro/Documents/Personal/Code/my-projects/pi-interactive-apps` with the tested extension, tests, package manifest, README, changelog, MIT license, and this plan.
 - [x] Run the complete 38-test suite and repository checks in the package repository.
-- [x] Create the public `danchamorro/pi-interactive-apps` GitHub repository and publish the pinned `v0.1.0` release tag.
+- [x] Create the public `danchamorro/pi-interactive-apps` GitHub repository and publish the initial `v0.1.0` release.
+- [ ] Publish `v0.1.1` from current `main` with the demo and corrected install source, mark it as the latest release, and leave `v0.1.0` immutable.
 - [x] Install `git:github.com/danchamorro/pi-interactive-apps` in pi-slim, pi-gsg, pi-dcit, and pi-bridge.
 - [x] Remove the duplicate `shared/extensions/interactive-apps/` copy after all four package installs succeed.
 - [x] Add the 25-second demo video to the package repository and README.
