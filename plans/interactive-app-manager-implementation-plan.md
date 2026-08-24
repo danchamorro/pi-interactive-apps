@@ -169,11 +169,11 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - [x] Create `/Users/danielchamorro/Documents/Personal/Code/my-projects/pi-interactive-apps` with the tested extension, tests, package manifest, README, changelog, MIT license, and this plan.
 - [x] Run the complete 38-test suite and repository checks in the package repository.
 - [x] Create the public `danchamorro/pi-interactive-apps` GitHub repository and publish the initial `v0.1.0` release.
-- [ ] Publish `v0.1.1` from current `main` with the demo and corrected install source, mark it as the latest release, and leave `v0.1.0` immutable.
+- [x] Publish `v0.1.1` from current `main` with the demo and corrected install source, mark it as the latest release, and leave `v0.1.0` immutable.
 - [x] Install `git:github.com/danchamorro/pi-interactive-apps` in pi-slim, pi-gsg, pi-dcit, and pi-bridge.
 - [x] Remove the duplicate `shared/extensions/interactive-apps/` copy after all four package installs succeed.
 - [x] Add the 25-second demo video to the package repository and README.
-- [ ] Verify profile settings, installed package clones, tests, and repository diffs without changing unrelated work.
+- [x] Verify profile settings, installed package clones, tests, and repository diffs without changing unrelated work.
 
 **Recovery:** Remove `git:github.com/danchamorro/pi-interactive-apps` from each affected profile and restore `shared/extensions/interactive-apps/` from commit `e6151f3` plus the footer follow-up changes.
 
@@ -203,10 +203,10 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - [ ] Sessions survive `/reload`, Pi quit, and Pi restart in the same cwd.
 - [x] Missing tmux, no private server, vanished sessions, nonzero tmux results, and attach failures produce bounded errors and restore Pi's TUI.
 - [x] `tmux ls` remains isolated from `tmux -L pi-apps list-sessions`.
-- [ ] pi-slim, pi-gsg, and pi-dcit load the single shared extension after `/reload`.
-- [x] `git -C /Users/danielchamorro/Documents/Personal/pi-profiles status --short -- shared/extensions/interactive-apps shared/extensions/tode` shows only the intended app-manager migration.
-- [x] `git -C /Users/danielchamorro/Documents/Personal/pi-profiles diff --check -- shared/extensions/interactive-apps shared/extensions/tode` reports no whitespace errors in tracked changes.
-- [x] `! rg -n '(API_KEY|AUTH_TOKEN|PASSWORD|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY)' /Users/danielchamorro/Documents/Personal/pi-profiles/shared/extensions/interactive-apps` reports no credential material.
+- [ ] pi-slim, pi-gsg, pi-dcit, and pi-bridge load the installed package after `/reload`.
+- [x] All four settings files contain exactly one unpinned `git:github.com/danchamorro/pi-interactive-apps` entry, and the old shared copy is absent.
+- [x] The package and profile settings pass `git diff --check` without changing unrelated work.
+- [x] The package's TypeScript and manifest contain no credential material.
 
 ## Implementation notes (2026-08-24)
 - Implemented and committed in two commits: `feat(apps): add project-filtered tmux session manager` and `feat(apps): add persistent interactive app dashboard`. 38 automated tests pass.
@@ -215,3 +215,7 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - `npm test` in `shared/extensions/background-terminals` fails on this machine even before this change (`@earendil-works/pi-coding-agent` is not resolvable outside Pi). `background-terminals` was not modified.
 - Remaining unchecked final-verification items are the manual in-Pi checks (reload rollout, acceptance flows, persistence across Pi restart).
 - Follow-up footer status uses Pi's native extension-status slot. It shows only current-project apps, polls every two seconds, and disappears at zero.
+- The standalone package is public at `https://github.com/danchamorro/pi-interactive-apps`. `v0.1.1` is the latest release; `v0.1.0` remains immutable.
+- pi-slim, pi-gsg, pi-dcit, and pi-bridge track unpinned `main` at commit `b893acb`; the 38-test suite passes in every installed clone.
+- The README links the 25-second `docs/interactive-apps.mp4` demo and omits Tode from the short usage example while retaining `/tode` support.
+- The packaged version does not register `ctrl+shift+t`, matching the source state at extraction.
