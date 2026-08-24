@@ -172,7 +172,7 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - [x] Publish `v0.1.1` from current `main` with the demo and corrected install source, mark it as the latest release, and leave `v0.1.0` immutable.
 - [x] Install `git:github.com/danchamorro/pi-interactive-apps` in pi-slim, pi-gsg, pi-dcit, and pi-bridge.
 - [x] Remove the duplicate `shared/extensions/interactive-apps/` copy after all four package installs succeed.
-- [x] Add the 25-second demo video to the package repository and README.
+- [x] Upload the 25-second demo as a GitHub user attachment and embed it in the README.
 - [x] Verify profile settings, installed package clones, tests, and repository diffs without changing unrelated work.
 
 **Recovery:** Remove `git:github.com/danchamorro/pi-interactive-apps` from each affected profile and restore `shared/extensions/interactive-apps/` from commit `e6151f3` plus the footer follow-up changes.
@@ -217,5 +217,5 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - Follow-up footer status uses Pi's native extension-status slot. It shows only current-project apps, polls every two seconds, and disappears at zero.
 - The standalone package is public at `https://github.com/danchamorro/pi-interactive-apps`. `v0.1.1` is the latest release; `v0.1.0` remains immutable.
 - pi-slim, pi-gsg, pi-dcit, and pi-bridge track unpinned `main`; the 38-test suite passes in every installed clone.
-- The README links the 25-second `docs/interactive-apps.mp4` demo and omits Tode from the short usage example while retaining `/tode` support.
+- The README embeds the 25-second GitHub video attachment and omits Tode from the short usage example while retaining `/tode` support.
 - The packaged version does not register `ctrl+shift+t`, matching the source state at extraction.

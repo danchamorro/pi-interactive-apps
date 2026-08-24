@@ -4,7 +4,7 @@ Persistent, project-scoped terminal apps for Pi, backed by a private tmux server
 
 ## Demo
 
-[Watch the 25-second demo](https://github.com/danchamorro/pi-interactive-apps/blob/main/docs/interactive-apps.mp4)
+https://github.com/user-attachments/assets/2170da3e-352b-4fd0-913b-ed4f6ce0bb54
 
 ## What it does
 
