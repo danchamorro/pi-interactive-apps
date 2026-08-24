@@ -216,6 +216,6 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 - Remaining unchecked final-verification items are the manual in-Pi checks (reload rollout, acceptance flows, persistence across Pi restart).
 - Follow-up footer status uses Pi's native extension-status slot. It shows only current-project apps, polls every two seconds, and disappears at zero.
 - The standalone package is public at `https://github.com/danchamorro/pi-interactive-apps`. `v0.1.1` is the latest release; `v0.1.0` remains immutable.
-- pi-slim, pi-gsg, pi-dcit, and pi-bridge track unpinned `main` at commit `b893acb`; the 38-test suite passes in every installed clone.
+- pi-slim, pi-gsg, pi-dcit, and pi-bridge track unpinned `main`; the 38-test suite passes in every installed clone.
 - The README links the 25-second `docs/interactive-apps.mp4` demo and omits Tode from the short usage example while retaining `/tode` support.
 - The packaged version does not register `ctrl+shift+t`, matching the source state at extraction.
