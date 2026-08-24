@@ -2,6 +2,10 @@
 
 Persistent, project-scoped terminal apps for Pi, backed by a private tmux server.
 
+## Demo
+
+[Watch the 25-second demo](https://github.com/danchamorro/pi-interactive-apps/blob/main/docs/interactive-apps.mp4)
+
 ## What it does
 
 - Starts any terminal command with `/app <command>`.
@@ -24,19 +28,11 @@ The extension uses `tmux -L pi-apps`, so it never reads or changes sessions on y
 
 ## Install
 
-Install the tested release:
-
-```bash
-pi install git:github.com/danchamorro/pi-interactive-apps@v0.1.0
-```
-
-Run `/reload` if Pi is already open.
-
-To install the latest `main` branch instead:
-
 ```bash
 pi install git:github.com/danchamorro/pi-interactive-apps
 ```
+
+Run `/reload` if Pi is already open.
 
 Try a local checkout without installing it:
 
@@ -51,7 +47,6 @@ Start and attach to an app:
 ```text
 /app btop
 /app lazygit
-/app tode .
 ```
 
 Inside the app, press `Ctrl+B`, then `D` to detach and return to the dashboard.

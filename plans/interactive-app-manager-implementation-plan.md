@@ -168,12 +168,13 @@ Replace the shared Tode-only terminal handoff with a project-scoped interactive 
 **Tasks:**
 - [x] Create `/Users/danielchamorro/Documents/Personal/Code/my-projects/pi-interactive-apps` with the tested extension, tests, package manifest, README, changelog, MIT license, and this plan.
 - [x] Run the complete 38-test suite and repository checks in the package repository.
-- [ ] Create the public `danchamorro/pi-interactive-apps` GitHub repository and publish the pinned `v0.1.0` release tag.
-- [ ] Install `git:github.com/danchamorro/pi-interactive-apps@v0.1.0` in pi-slim, pi-gsg, pi-dcit, and pi-bridge.
-- [ ] Remove the duplicate `shared/extensions/interactive-apps/` copy after all four package installs succeed.
+- [x] Create the public `danchamorro/pi-interactive-apps` GitHub repository and publish the pinned `v0.1.0` release tag.
+- [x] Install `git:github.com/danchamorro/pi-interactive-apps` in pi-slim, pi-gsg, pi-dcit, and pi-bridge.
+- [x] Remove the duplicate `shared/extensions/interactive-apps/` copy after all four package installs succeed.
+- [x] Add the 25-second demo video to the package repository and README.
 - [ ] Verify profile settings, installed package clones, tests, and repository diffs without changing unrelated work.
 
-**Recovery:** Remove the package entry from each affected profile and restore `shared/extensions/interactive-apps/` from commit `e6151f3` plus the footer follow-up changes.
+**Recovery:** Remove `git:github.com/danchamorro/pi-interactive-apps` from each affected profile and restore `shared/extensions/interactive-apps/` from commit `e6151f3` plus the footer follow-up changes.
 
 ## Parallel execution
 - No safe parallelism identified. The dashboard and orchestration depend on the manager snapshot and action contracts from Phase 1.
