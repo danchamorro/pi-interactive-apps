@@ -1,0 +1,42 @@
+{
+  "name": "pi-interactive-apps",
+  "version": "0.1.0",
+  "description": "Persistent, project-scoped interactive terminal apps for Pi",
+  "type": "module",
+  "license": "MIT",
+  "author": "Daniel Chamorro",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "tmux",
+    "terminal",
+    "tui"
+  ],
+  "files": [
+    "index.ts",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test --experimental-strip-types manager.test.ts app.test.ts index.test.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danchamorro/pi-interactive-apps.git"
+  },
+  "homepage": "https://github.com/danchamorro/pi-interactive-apps#readme",
+  "bugs": {
+    "url": "https://github.com/danchamorro/pi-interactive-apps/issues"
+  }
+}
