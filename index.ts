@@ -4,8 +4,9 @@
  * `/app <command>` starts an arbitrary terminal command inside a private
  * tmux server (`tmux -L pi-apps`) scoped to the current project, attaches
  * immediately, and drops into a /ps-style dashboard after `Ctrl+B D`
- * detaches. `/app` opens the project dashboard, while `/app --all` groups
- * apps from every project. Sessions intentionally survive Pi reload and exit.
+ * detaches. `/app` opens the project dashboard with profile-wide favorites,
+ * while `/app --all` groups apps from every project. Sessions intentionally
+ * survive Pi reload and exit.
  * The session_shutdown handler stops only the
  * footer poll; it never cleans up tmux sessions.
  */
@@ -15,6 +16,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { type AppFavorite, FavoriteStore } from "./src/favorites.ts";
 import {
 	AppManager,
 	AppManagerError,
@@ -88,16 +90,26 @@ async function attachTo(
 async function dashboardLoop(
 	ctx: ExtensionContext,
 	manager: AppManager,
+	favorites: FavoriteStore,
 	selection: DashboardSelection,
 	allProjects = false,
 ): Promise<void> {
+	let favoriteLoadErrorShown = false;
 	while (true) {
 		manager.refresh();
-		if (manager.size() === 0) {
+		let pinned: AppFavorite[] = [];
+		if (!allProjects) {
+			try {
+				pinned = favorites.list();
+				favoriteLoadErrorShown = false;
+			} catch (error) {
+				if (!favoriteLoadErrorShown) notifyError(ctx, error);
+				favoriteLoadErrorShown = true;
+			}
+		}
+		if (allProjects && manager.size() === 0) {
 			ctx.ui.notify(
-				allProjects
-					? "No interactive apps are running. Start one with /app <command>."
-					: "No interactive apps in this project. Start one with /app <command>.",
+				"No interactive apps are running. Start one with /app <command>.",
 				"info",
 			);
 			return;
@@ -113,6 +125,7 @@ async function dashboardLoop(
 					selection,
 					done,
 					allProjects,
+					pinned,
 				),
 			{
 				overlay: true,
@@ -121,14 +134,8 @@ async function dashboardLoop(
 		);
 
 		if (!action) {
-			// Escape, or the dashboard auto-closed because every app exited.
-			if (manager.size() === 0) {
-				ctx.ui.notify(
-					allProjects
-						? "All interactive apps have exited."
-						: "All interactive apps in this project have exited.",
-					"info",
-				);
+			if (allProjects && manager.size() === 0) {
+				ctx.ui.notify("All interactive apps have exited.", "info");
 			}
 			return;
 		}
@@ -137,9 +144,47 @@ async function dashboardLoop(
 			if (manager.get(action.id)) await attachTo(ctx, manager, action.id);
 			continue;
 		}
+		if (action.type === "start") {
+			try {
+				const session = manager.start(action.command);
+				selection.id = session.id;
+				await attachTo(ctx, manager, session.id);
+			} catch (error) {
+				notifyError(ctx, error);
+			}
+			continue;
+		}
+		if (action.type === "addFavorite") {
+			const command = await ctx.ui.input(
+				"Add favorite",
+				"Command to run in the current project",
+			);
+			if (command !== undefined) {
+				try {
+					const added = favorites.add(command);
+					selection.id = `favorite:${command.trim()}`;
+					ctx.ui.notify(added ? "Favorite added." : "Favorite already pinned.", "info");
+				} catch (error) {
+					notifyError(ctx, error);
+				}
+			}
+			continue;
+		}
+		if (action.type === "removeFavorite") {
+			const confirmed = await ctx.ui.confirm(
+				"Remove favorite",
+				`Remove "${action.command}" from favorites?`,
+			);
+			if (confirmed) {
+				try {
+					favorites.remove(action.command);
+				} catch (error) {
+					notifyError(ctx, error);
+				}
+			}
+			continue;
+		}
 
-		// action.type === "kill" — confirm outside the overlay; an attached
-		// editor may hold unsaved work.
 		const snap = manager.get(action.id);
 		if (!snap) continue;
 		const confirmed = await ctx.ui.confirm(
@@ -171,6 +216,7 @@ async function runApp(ctx: ExtensionContext, args: string): Promise<void> {
 	const manager = allProjects
 		? AppManager.all(ctx.cwd)
 		: new AppManager(ctx.cwd);
+	const favorites = new FavoriteStore();
 	const selection: DashboardSelection = { index: 0 };
 	try {
 		if (command && !allProjects) {
@@ -178,7 +224,7 @@ async function runApp(ctx: ExtensionContext, args: string): Promise<void> {
 			selection.id = session.id;
 			await attachTo(ctx, manager, session.id);
 		}
-		await dashboardLoop(ctx, manager, selection, allProjects);
+		await dashboardLoop(ctx, manager, favorites, selection, allProjects);
 	} catch (error) {
 		notifyError(ctx, error);
 	}

@@ -30,6 +30,7 @@ const fail = (msg) => { process.stderr.write(msg + "\\n"); process.exit(1); };
 const sessions = read();
 switch (args[2]) {
 	case "new-session": {
+		if (process.env.TMUX_STUB_FAIL_NEW === "1") fail("forced new-session failure");
 		const name = args[args.indexOf("-s") + 1];
 		sessions[name] = { created: 1700000000 + Object.keys(sessions).length, attached: 0, opts: {} };
 		write(sessions);
@@ -95,12 +96,14 @@ function makeCtx(options: {
 	mode?: string;
 	scripts?: DashboardScript[];
 	confirms?: boolean[];
+	inputs?: Array<string | undefined>;
 }) {
 	const notifications: string[] = [];
 	const statuses: Array<{ key: string; text: string | undefined }> = [];
 	const tuiEvents: string[] = [];
 	const scripts = options.scripts ?? [];
 	const confirms = options.confirms ?? [];
+	const inputs = options.inputs ?? [];
 	const confirmationPrompts: Array<{ title: string; message: string }> = [];
 	const theme = {
 		fg: (_c: string, text: string) => text,
@@ -131,6 +134,7 @@ function makeCtx(options: {
 				confirmationPrompts.push({ title, message });
 				return confirms.shift() ?? false;
 			},
+			input: async () => inputs.shift(),
 			custom: (factory: never, customOptions?: { overlay?: boolean }) =>
 				new Promise((resolve) => {
 					let component: { dispose?: () => void } | undefined;
@@ -172,20 +176,28 @@ function withStub(t: { after(fn: () => void): void }) {
 	chmodSync(join(binDir, "tmux"), 0o755);
 	const statePath = join(dir, "state.json");
 	const logPath = join(dir, "log.txt");
+	const favoritePath = join(dir, "agent", "interactive-apps.json");
 	writeFileSync(logPath, "");
 
 	const oldPath = process.env.PATH;
 	const oldState = process.env.TMUX_STUB_STATE;
 	const oldLog = process.env.TMUX_STUB_LOG;
+	const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
+	const oldFailNew = process.env.TMUX_STUB_FAIL_NEW;
 	process.env.PATH = `${binDir}:${oldPath}`;
 	process.env.TMUX_STUB_STATE = statePath;
 	process.env.TMUX_STUB_LOG = logPath;
+	process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
 	t.after(() => {
 		process.env.PATH = oldPath;
 		if (oldState === undefined) delete process.env.TMUX_STUB_STATE;
 		else process.env.TMUX_STUB_STATE = oldState;
 		if (oldLog === undefined) delete process.env.TMUX_STUB_LOG;
 		else process.env.TMUX_STUB_LOG = oldLog;
+		if (oldAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = oldAgentDir;
+		if (oldFailNew === undefined) delete process.env.TMUX_STUB_FAIL_NEW;
+		else process.env.TMUX_STUB_FAIL_NEW = oldFailNew;
 		rmSync(dir, { recursive: true, force: true });
 	});
 
@@ -200,6 +212,20 @@ function withStub(t: { after(fn: () => void): void }) {
 		},
 		seed: (sessions: Record<string, unknown>) =>
 			writeFileSync(statePath, JSON.stringify(sessions)),
+		favorites: () => {
+			try {
+				return JSON.parse(readFileSync(favoritePath, "utf8"));
+			} catch {
+				return { favorites: [] };
+			}
+		},
+		seedFavorites: (value: unknown) => {
+			mkdirSync(join(dir, "agent"), { recursive: true });
+			writeFileSync(
+				favoritePath,
+				typeof value === "string" ? value : JSON.stringify(value),
+			);
+		},
 		log: () =>
 			readFileSync(logPath, "utf8")
 				.split("\n")
@@ -311,6 +337,85 @@ test("/app <command> starts, attaches, and re-enters the dashboard", async (t) =
 		notifications.filter((n) => n.startsWith("error:")),
 		[],
 	);
+});
+
+test("the empty dashboard can pin and start a favorite in the current project", async (t) => {
+	const stub = withStub(t);
+	const { commands } = register();
+	const added = makeCtx({
+		cwd: stub.projectDir,
+		inputs: ["lazygit --path ."],
+		scripts: [
+			(component) => component.handleInput("a"),
+			(component) => component.handleInput("tui.select.confirm"),
+			(component) => component.handleInput("tui.select.cancel"),
+		],
+	});
+
+	await commands.get("app")!("", added.ctx);
+	assert.deepEqual(stub.favorites(), { favorites: ["lazygit --path ."] });
+	assert.match(added.notifications[0], /Favorite added/);
+	const create = stub.log().find((argv) => argv[2] === "new-session");
+	assert.ok(create?.includes("PI_APP_COMMAND=lazygit --path ."));
+	assert.equal(create?.[create.indexOf("-c") + 1], stub.projectDir);
+
+	const removed = makeCtx({
+		cwd: stub.projectDir,
+		confirms: [true],
+		scripts: [
+			(component) => {
+				component.handleInput("tui.select.down");
+				component.handleInput("x");
+			},
+			(component) => component.handleInput("tui.select.cancel"),
+		],
+	});
+	await commands.get("app")!("", removed.ctx);
+	assert.deepEqual(stub.favorites(), { favorites: [] });
+	assert.match(removed.confirmationPrompts[0].message, /lazygit --path \./);
+});
+
+test("a corrupt favorites file does not block the local dashboard", async (t) => {
+	const stub = withStub(t);
+	stub.seedFavorites("not json");
+	const { commands } = register();
+	let opened = false;
+	const { ctx, notifications } = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [(component) => {
+			opened = true;
+			component.handleInput("tui.select.cancel");
+		}],
+	});
+
+	await commands.get("app")!("", ctx);
+	assert.equal(opened, true);
+	assert.match(notifications[0], /Could not read favorites/);
+});
+
+test("a favorite start failure returns to the dashboard", async (t) => {
+	const stub = withStub(t);
+	stub.seedFavorites({ favorites: ["lazygit"] });
+	process.env.TMUX_STUB_FAIL_NEW = "1";
+	const { commands } = register();
+	let openings = 0;
+	const { ctx, notifications } = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [
+			(component) => {
+				openings++;
+				component.handleInput("tui.select.confirm");
+			},
+			(component) => {
+				openings++;
+				component.handleInput("tui.select.cancel");
+			},
+		],
+	});
+
+	await commands.get("app")!("", ctx);
+	assert.equal(openings, 2);
+	assert.match(notifications[0], /Could not start "lazygit"/);
 });
 
 test("only the exact trimmed --all token opens the global dashboard", async (t) => {
@@ -451,10 +556,7 @@ test("x kills only after confirmation", async (t) => {
 	await commands.get("app")!("", second.ctx);
 	assert.deepEqual(stub.state(), {});
 	assert.ok(stub.log().some((argv) => argv[2] === "kill-session"));
-	assert.match(
-		second.notifications.at(-1) ?? "",
-		/info:No interactive apps/,
-	);
+	assert.deepEqual(second.notifications, []);
 });
 
 test("sessions from another project stay hidden", async (t) => {
@@ -472,7 +574,7 @@ test("sessions from another project stay hidden", async (t) => {
 	const { commands } = register();
 	const { ctx, notifications } = makeCtx({ cwd: stub.projectDir });
 	await commands.get("app")!("", ctx);
-	assert.match(notifications[0], /info:No interactive apps/);
+	assert.deepEqual(notifications, []);
 	// The other project's session was not touched.
 	assert.equal(Object.keys(stub.state()).length, 1);
 });

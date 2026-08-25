@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 - 2026-08-25
+
+- Open the project dashboard when no apps are running.
+- Add profile-wide favorite commands that can be pinned, started, and removed from the dashboard.
+
 ## 0.2.0 - 2026-08-24
 
 - Add `/app --all`, a global dashboard grouped by canonical project directory.

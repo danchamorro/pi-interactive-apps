@@ -1,6 +1,6 @@
 {
   "name": "pi-interactive-apps",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Persistent, project-scoped interactive terminal apps for Pi",
   "type": "module",
   "license": "MIT",
@@ -15,12 +15,13 @@
   "files": [
     "index.ts",
     "src",
+    "assets",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test --experimental-strip-types manager.test.ts app.test.ts index.test.ts"
+    "test": "node --test --experimental-strip-types manager.test.ts favorites.test.ts app.test.ts index.test.ts"
   },
   "pi": {
     "extensions": [

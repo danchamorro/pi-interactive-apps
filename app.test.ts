@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { AppFavorite } from "./src/favorites.ts";
 import type { AppSession } from "./src/manager.ts";
 import {
 	AppDashboard,
@@ -77,6 +78,10 @@ function session(id: string, extra: Partial<AppSession> = {}): AppSession {
 	};
 }
 
+function favorite(command: string): AppFavorite {
+	return { command, label: command.split(/\s+/)[0] };
+}
+
 function fakeView(initial: AppSession[]) {
 	let sessions = initial;
 	const listeners = new Set<() => void>();
@@ -128,6 +133,7 @@ function makeDashboard(
 	sessions: AppSession[],
 	selection: DashboardSelection = { index: 0 },
 	allProjects = false,
+	favorites: AppFavorite[] = [],
 ) {
 	const server = fakeView(sessions);
 	const results: Array<AppAction | null> = [];
@@ -140,6 +146,7 @@ function makeDashboard(
 		selection,
 		(value) => results.push(value),
 		allProjects,
+		favorites,
 	);
 	return { dashboard, server, results, selection, renders };
 }
@@ -168,6 +175,27 @@ test("x resolves a kill action and escape resolves null exactly once", () => {
 	assert.deepEqual(second.results, [null]);
 	second.dashboard.dispose();
 	assert.equal(second.results.length, 1);
+});
+
+test("favorite rows start, remove, and expose the add action", () => {
+	const pinned = [favorite("lazygit --path .")];
+	const start = makeDashboard([], { index: 0 }, false, pinned);
+	assert.match(start.dashboard.render(80).join("\n"), /favorites · 1/);
+	assert.match(start.dashboard.render(80).join("\n"), /lazygit --path \./);
+	start.dashboard.handleInput("tui.select.confirm");
+	assert.deepEqual(start.results, [
+		{ type: "start", command: "lazygit --path ." },
+	]);
+
+	const remove = makeDashboard([], { index: 0 }, false, pinned);
+	remove.dashboard.handleInput("x");
+	assert.deepEqual(remove.results, [
+		{ type: "removeFavorite", command: "lazygit --path ." },
+	]);
+
+	const add = makeDashboard([]);
+	add.dashboard.handleInput("a");
+	assert.deepEqual(add.results, [{ type: "addFavorite" }]);
 });
 
 test("j/k navigation wraps and keeps the selected id stable", () => {
@@ -214,7 +242,7 @@ test("global rendering groups projects while navigation targets only sessions", 
 	stop.dashboard.dispose();
 });
 
-test("the refresh timer polls, auto-closes when empty, and stops on dispose", (t) => {
+test("the refresh timer keeps an empty dashboard open and stops on dispose", (t) => {
 	t.mock.timers.enable({ apis: ["setInterval"] });
 	const { dashboard, server, results, renders } = makeDashboard([
 		session("pi-app-aaaaaaaa"),
@@ -229,17 +257,18 @@ test("the refresh timer polls, auto-closes when empty, and stops on dispose", (t
 	server.set([session("pi-app-aaaaaaaa", { attached: 1 })]);
 	assert.equal(renders(), before + 1);
 
-	// All apps exit → next poll auto-closes with null.
+	// All apps exit, but the dashboard stays open for favorites.
 	server.set([]);
 	t.mock.timers.tick(1000);
-	assert.deepEqual(results, [null]);
+	assert.deepEqual(results, []);
+	assert.match(dashboard.render(60).join("\n"), /No apps or favorites/);
 
 	const after = server.refreshes();
 	dashboard.dispose(); // idempotent, timer stopped
 	dashboard.dispose();
 	t.mock.timers.tick(5000);
 	assert.equal(server.refreshes(), after);
-	assert.equal(results.length, 1);
+	assert.equal(results.length, 0);
 });
 
 test("rendering stays inside narrow widths and fixed height", () => {
@@ -284,9 +313,9 @@ test("global grouped overflow keeps a later selected app visible", () => {
 	dashboard.dispose();
 });
 
-test("rendering an empty list is safe while the auto-close race resolves", () => {
+test("rendering an empty list shows the favorite prompt", () => {
 	const { dashboard } = makeDashboard([]);
 	const lines = dashboard.render(60);
-	assert.ok(lines.length > 0);
+	assert.match(lines.join("\n"), /Press a to add a favorite/);
 	dashboard.dispose();
 });

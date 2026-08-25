@@ -1,8 +1,8 @@
 /**
- * /app dashboard — a full-screen overlay over the synchronous AppManager
- * read model, adapted from the proven /ps TerminalDashboard. One stage only:
- * Enter resolves an attach action, `x` resolves a kill action (the command
- * orchestrator confirms and executes), Escape resolves null.
+ * /app dashboard, a full-screen overlay over the synchronous AppManager
+ * read model. Running sessions and profile-wide favorites share one list.
+ * The command orchestrator executes start, attach, stop, add, and remove
+ * actions after the overlay closes.
  */
 
 import type {
@@ -10,6 +10,7 @@ import type {
 	Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
+import type { AppFavorite } from "../favorites.ts";
 import type { AppSession } from "../manager.ts";
 import {
 	formatAge,
@@ -30,11 +31,39 @@ export interface AppManagerView {
 
 export type AppAction =
 	| { type: "attach"; id: string }
-	| { type: "kill"; id: string };
+	| { type: "kill"; id: string }
+	| { type: "start"; command: string }
+	| { type: "removeFavorite"; command: string }
+	| { type: "addFavorite" };
 
 export interface DashboardSelection {
 	id?: string;
 	index: number;
+}
+
+type DashboardItem =
+	| { id: string; type: "session"; session: AppSession }
+	| { id: string; type: "favorite"; favorite: AppFavorite };
+
+function dashboardItems(
+	sessions: ReadonlyArray<AppSession>,
+	favorites: ReadonlyArray<AppFavorite>,
+	allProjects: boolean,
+): DashboardItem[] {
+	return [
+		...sessions.map((session) => ({
+			id: session.id,
+			type: "session" as const,
+			session,
+		})),
+		...(allProjects
+			? []
+			: favorites.map((favorite) => ({
+					id: `favorite:${favorite.command}`,
+					type: "favorite" as const,
+					favorite,
+				}))),
+	];
 }
 
 export function reconcileDashboardSelection(
@@ -69,6 +98,7 @@ export class AppDashboard implements Component {
 	private selection: DashboardSelection;
 	private done: (value: AppAction | null) => void;
 	private allProjects: boolean;
+	private favorites: ReadonlyArray<AppFavorite>;
 
 	private closed = false;
 	private ticker: ReturnType<typeof setInterval>;
@@ -82,6 +112,7 @@ export class AppDashboard implements Component {
 		selection: DashboardSelection,
 		done: (value: AppAction | null) => void,
 		allProjects = false,
+		favorites: ReadonlyArray<AppFavorite> = [],
 	) {
 		this.tui = tui;
 		this.theme = theme;
@@ -90,6 +121,7 @@ export class AppDashboard implements Component {
 		this.selection = selection;
 		this.done = done;
 		this.allProjects = allProjects;
+		this.favorites = favorites;
 		// Live refresh at 1Hz; the subscription only fires on real change,
 		// so identical polls do not trigger redraws.
 		this.ticker = setInterval(() => {
@@ -99,7 +131,7 @@ export class AppDashboard implements Component {
 				// Keep showing the last snapshot; the orchestrator surfaces
 				// persistent tmux failures on its own calls.
 			}
-			if (this.view.size() === 0) this.close(null);
+			if (this.allProjects && this.view.size() === 0) this.close(null);
 		}, 1000);
 		this.unsubChange = view.subscribe(() => this.tui.requestRender());
 	}
@@ -121,40 +153,55 @@ export class AppDashboard implements Component {
 	}
 
 	handleInput(data: string): void {
-		const sessions = this.view.list();
-		reconcileDashboardSelection(this.selection, sessions);
+		const items = dashboardItems(
+			this.view.list(),
+			this.favorites,
+			this.allProjects,
+		);
+		reconcileDashboardSelection(this.selection, items);
+		const selected = items[this.selection.index];
 
 		if (this.keybindings.matches(data, "tui.select.cancel")) {
 			this.close(null);
 			return;
 		}
 		if (this.keybindings.matches(data, "tui.select.confirm")) {
-			const snap = sessions[this.selection.index];
-			if (snap) this.close({ type: "attach", id: snap.id });
+			if (selected?.type === "session") {
+				this.close({ type: "attach", id: selected.session.id });
+			} else if (selected?.type === "favorite") {
+				this.close({ type: "start", command: selected.favorite.command });
+			}
 			return;
 		}
 		if (this.keybindings.matches(data, "tui.select.up") || data === "k") {
-			if (sessions.length > 0) {
+			if (items.length > 0) {
 				this.selection.index =
-					(this.selection.index - 1 + sessions.length) % sessions.length;
-				this.selection.id = sessions[this.selection.index]?.id;
+					(this.selection.index - 1 + items.length) % items.length;
+				this.selection.id = items[this.selection.index]?.id;
 				this.tui.requestRender();
 			}
 			return;
 		}
 		if (this.keybindings.matches(data, "tui.select.down") || data === "j") {
-			if (sessions.length > 0) {
-				this.selection.index = (this.selection.index + 1) % sessions.length;
-				this.selection.id = sessions[this.selection.index]?.id;
+			if (items.length > 0) {
+				this.selection.index = (this.selection.index + 1) % items.length;
+				this.selection.id = items[this.selection.index]?.id;
 				this.tui.requestRender();
 			}
 			return;
 		}
 		if (data === "x") {
-			const snap = sessions[this.selection.index];
-			if (snap) this.close({ type: "kill", id: snap.id });
+			if (selected?.type === "session") {
+				this.close({ type: "kill", id: selected.session.id });
+			} else if (selected?.type === "favorite") {
+				this.close({
+					type: "removeFavorite",
+					command: selected.favorite.command,
+				});
+			}
 			return;
 		}
+		if (data === "a" && !this.allProjects) this.close({ type: "addFavorite" });
 	}
 
 	private borderSegment(width: number, title: string): string {
@@ -173,7 +220,8 @@ export class AppDashboard implements Component {
 	render(width: number): string[] {
 		const theme = this.theme;
 		const sessions = this.view.list();
-		reconcileDashboardSelection(this.selection, sessions);
+		const items = dashboardItems(sessions, this.favorites, this.allProjects);
+		reconcileDashboardSelection(this.selection, items);
 
 		const rows = this.tui.terminal.rows || 30;
 		// Same fixed-height model as /ps: cover everything but Pi's footer.
@@ -188,7 +236,7 @@ export class AppDashboard implements Component {
 			"muted",
 			this.allProjects
 				? `${sessions.length} app${sessions.length === 1 ? "" : "s"} across ${projectCount} project${projectCount === 1 ? "" : "s"}`
-				: `${sessions.length} app${sessions.length === 1 ? "" : "s"} in this project`,
+				: `${sessions.length} app${sessions.length === 1 ? "" : "s"} · ${this.favorites.length} favorite${this.favorites.length === 1 ? "" : "s"}`,
 		);
 		const headerPad = Math.max(
 			1,
@@ -212,7 +260,12 @@ export class AppDashboard implements Component {
 		);
 
 		const divider = theme.fg("border", "│");
-		const rowLines = this.renderRows(sessions, innerWidth, bodyHeight);
+		const rowLines = this.renderRows(
+			sessions,
+			this.favorites,
+			innerWidth,
+			bodyHeight,
+		);
 		for (let i = 0; i < bodyHeight; i++) {
 			lines.push(divider + padToWidth(rowLines[i] ?? "", innerWidth) + divider);
 		}
@@ -223,14 +276,11 @@ export class AppDashboard implements Component {
 				theme.fg("border", "╯"),
 		);
 
+		const help = this.allProjects
+			? `${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} attach · x stop · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`
+			: `${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} open · x stop/remove · a add favorite · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`;
 		lines.push(
-			truncateToWidth(
-				theme.fg(
-					"dim",
-					`  ${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} attach · x stop · ${configuredKeys(this.keybindings, "tui.select.cancel")} close · inside app: Ctrl+B then D detaches`,
-				),
-				width,
-			),
+			truncateToWidth(theme.fg("dim", `  ${help} · inside app: Ctrl+B then D detaches`), width),
 		);
 
 		return lines;
@@ -238,29 +288,40 @@ export class AppDashboard implements Component {
 
 	private renderRows(
 		sessions: ReadonlyArray<AppSession>,
+		favorites: ReadonlyArray<AppFavorite>,
 		width: number,
 		height: number,
 	): string[] {
 		const theme = this.theme;
-		const rows: Array<
-			| { cwd: string }
-			| { session: AppSession; sessionIndex: number }
-		> = [];
+		const items = dashboardItems(sessions, favorites, this.allProjects);
+		const rows: Array<{ heading: string } | { item: DashboardItem; itemIndex: number }> = [];
 		let previousCwd: string | undefined;
-		for (let sessionIndex = 0; sessionIndex < sessions.length; sessionIndex++) {
-			const session = sessions[sessionIndex];
-			if (this.allProjects && session.cwd !== previousCwd) {
-				rows.push({ cwd: session.cwd });
-				previousCwd = session.cwd;
+		for (let itemIndex = 0; itemIndex < sessions.length; itemIndex++) {
+			const item = items[itemIndex];
+			if (item?.type !== "session") continue;
+			if (this.allProjects && item.session.cwd !== previousCwd) {
+				rows.push({ heading: item.session.cwd });
+				previousCwd = item.session.cwd;
 			}
-			rows.push({ session, sessionIndex });
+			rows.push({ item, itemIndex });
+		}
+		if (!this.allProjects && favorites.length > 0) {
+			rows.push({ heading: `favorites · ${favorites.length}` });
+			for (let itemIndex = sessions.length; itemIndex < items.length; itemIndex++) {
+				rows.push({ item: items[itemIndex], itemIndex });
+			}
+		}
+		if (rows.length === 0) {
+			const message = this.allProjects
+				? "  No apps are running."
+				: "  No apps or favorites yet. Press a to add a favorite.";
+			return [theme.fg("muted", message)];
 		}
 
 		const selectedRow = Math.max(
 			0,
 			rows.findIndex(
-				(row) =>
-					"sessionIndex" in row && row.sessionIndex === this.selection.index,
+				(row) => "itemIndex" in row && row.itemIndex === this.selection.index,
 			),
 		);
 		const start =
@@ -272,20 +333,30 @@ export class AppDashboard implements Component {
 				: 0;
 		const visible = rows.slice(start, start + height);
 		const out = visible.map((row) => {
-			if ("cwd" in row) {
-				return truncateToWidth(
-					theme.fg("dim", `  ${oneLine(row.cwd)}`),
-					width,
-				);
+			if ("heading" in row) {
+				return truncateToWidth(theme.fg("dim", `  ${oneLine(row.heading)}`), width);
 			}
 
-			const { session: snap, sessionIndex } = row;
-			const isSelected = sessionIndex === this.selection.index;
+			const isSelected = row.itemIndex === this.selection.index;
 			const marker = isSelected ? theme.fg("accent", "❯") : " ";
-			const glyph =
-				snap.attached > 0
-					? theme.fg("success", "■")
-					: theme.fg("muted", "■");
+			if (row.item.type === "favorite") {
+				const favorite = row.item.favorite;
+				const label = isSelected
+					? theme.fg("accent", oneLine(favorite.label))
+					: theme.fg("text", oneLine(favorite.label));
+				const left = ` ${marker} ${theme.fg("warning", "★")} ${label}`;
+				const right = `${theme.fg("muted", oneLine(favorite.command))} `;
+				const rightWidth = Math.min(visibleWidth(right), Math.floor(width / 2));
+				const leftTruncated = truncateToWidth(left, Math.max(0, width - rightWidth - 2));
+				const rightTruncated = truncateToWidth(right, rightWidth);
+				const gap = Math.max(2, width - visibleWidth(leftTruncated) - visibleWidth(rightTruncated));
+				return truncateToWidth(leftTruncated + " ".repeat(gap) + rightTruncated, width);
+			}
+
+			const snap = row.item.session;
+			const glyph = snap.attached > 0
+				? theme.fg("success", "■")
+				: theme.fg("muted", "■");
 			const label = isSelected
 				? theme.fg("accent", oneLine(snap.label))
 				: theme.fg("text", oneLine(snap.label));
@@ -298,10 +369,7 @@ export class AppDashboard implements Component {
 					: theme.fg("muted", "detached"),
 			].join(dot)} `;
 			const rightWidth = visibleWidth(right);
-			const leftTruncated = truncateToWidth(
-				left,
-				Math.max(0, width - rightWidth - 2),
-			);
+			const leftTruncated = truncateToWidth(left, Math.max(0, width - rightWidth - 2));
 			const gap = Math.max(2, width - visibleWidth(leftTruncated) - rightWidth);
 			return truncateToWidth(leftTruncated + " ".repeat(gap) + right, width);
 		});
