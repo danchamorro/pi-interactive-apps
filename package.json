@@ -15,7 +15,6 @@
   "files": [
     "index.ts",
     "src",
-    "assets",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

@@ -256,9 +256,9 @@ function seedSession(
 
 // --- Tests -------------------------------------------------------------------
 
-test("registers /app and /tode", () => {
+test("registers /app", () => {
 	const { commands, events } = register();
-	assert.deepEqual([...commands.keys()].sort(), ["app", "tode"]);
+	assert.deepEqual([...commands.keys()].sort(), ["app"]);
 	assert.deepEqual([...events.keys()].sort(), ["session_shutdown", "session_start"]);
 });
 
@@ -435,19 +435,6 @@ test("only the exact trimmed --all token opens the global dashboard", async (t) 
 	assert.ok(create?.includes("PI_APP_COMMAND=--all now"));
 });
 
-test("/tode is an alias for /app tode .", async (t) => {
-	const stub = withStub(t);
-	const { commands } = register();
-	const { ctx } = makeCtx({
-		cwd: stub.projectDir,
-		scripts: [(c) => c.handleInput("tui.select.cancel")],
-	});
-	await commands.get("tode")!("", ctx);
-	const create = stub.log().find((argv) => argv[2] === "new-session");
-	assert.ok(create);
-	assert.ok(create.includes("PI_APP_COMMAND=tode ."));
-});
-
 test("enter on a dashboard row attaches to that session", async (t) => {
 	const stub = withStub(t);
 	seedSession(stub, "pi-app-00000001", "lazygit");
@@ -531,7 +518,7 @@ test("the global dashboard reports when all apps exit during refresh", async (t)
 
 test("x kills only after confirmation", async (t) => {
 	const stub = withStub(t);
-	seedSession(stub, "pi-app-00000001", "tode");
+	seedSession(stub, "pi-app-00000001", "btop");
 	const { commands } = register();
 
 	// Cancelled: session survives, dashboard reopens, escape closes.

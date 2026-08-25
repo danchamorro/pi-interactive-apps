@@ -1,5 +1,5 @@
 /**
- * Interactive app manager with /app and /tode commands.
+ * Interactive app manager with the /app command.
  *
  * `/app <command>` starts an arbitrary terminal command inside a private
  * tmux server (`tmux -L pi-apps`) scoped to the current project, attaches
@@ -270,10 +270,5 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Start or manage persistent interactive apps (/app <command>, /app, or /app --all)",
 		handler: (args, ctx) => runApp(ctx, args ?? ""),
-	});
-
-	pi.registerCommand("tode", {
-		description: "Open the current project in Tode (alias for /app tode .)",
-		handler: (_args, ctx) => runApp(ctx, "tode ."),
 	});
 }

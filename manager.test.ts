@@ -94,7 +94,7 @@ function fakeServer() {
 test("deriveLabel keeps the leading executable name only", () => {
 	assert.equal(deriveLabel("btop"), "btop");
 	assert.equal(deriveLabel("  /usr/local/bin/lazygit --flag  "), "lazygit");
-	assert.equal(deriveLabel("tode ."), "tode");
+	assert.equal(deriveLabel("vim ."), "vim");
 	assert.equal(deriveLabel("\u0007\u001b[31m"), "app");
 	assert.equal(deriveLabel("x".repeat(64)).length, 32);
 });

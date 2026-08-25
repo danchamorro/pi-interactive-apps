@@ -2,6 +2,8 @@
 
 ## 0.3.0 - 2026-08-25
 
+- **Breaking:** remove the `/tode` command. Use `/app tode` if you still want it.
+
 - Open the project dashboard when no apps are running.
 - Add profile-wide favorite commands that can be pinned, started, and removed from the dashboard.
 
