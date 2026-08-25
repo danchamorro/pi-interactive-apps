@@ -271,4 +271,9 @@ export default function (pi: ExtensionAPI) {
 			"Start or manage persistent interactive apps (/app <command>, /app, or /app --all)",
 		handler: (args, ctx) => runApp(ctx, args ?? ""),
 	});
+
+	pi.registerShortcut("ctrl+shift+a", {
+		description: "Open interactive apps",
+		handler: (ctx) => runApp(ctx, ""),
+	});
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 - 2026-08-25
+
+- Open the current project's dashboard with `Ctrl+Shift+A`.
+
 ## 0.3.0 - 2026-08-25
 
 - **Breaking:** remove the `/tode` command. Use `/app tode` if you still want it.

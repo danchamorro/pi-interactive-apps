@@ -74,17 +74,21 @@ process.exit(0);
 interface Registered {
 	commands: Map<string, (args: string, ctx: unknown) => Promise<void> | void>;
 	events: Map<string, (event: unknown, ctx: unknown) => Promise<void> | void>;
+	shortcuts: Map<string, (ctx: unknown) => Promise<void> | void>;
 }
 
 function register(): Registered {
 	const commands = new Map();
 	const events = new Map();
+	const shortcuts = new Map();
 	appsExtension({
 		on: (name: string, handler: never) => events.set(name, handler),
 		registerCommand: (name: string, options: { handler: never }) =>
 			commands.set(name, options.handler),
+		registerShortcut: (key: string, options: { handler: never }) =>
+			shortcuts.set(key, options.handler),
 	} as unknown as ExtensionAPI);
-	return { commands, events };
+	return { commands, events, shortcuts };
 }
 
 type DashboardScript = (component: {
@@ -256,10 +260,27 @@ function seedSession(
 
 // --- Tests -------------------------------------------------------------------
 
-test("registers /app", () => {
-	const { commands, events } = register();
+test("registers /app and Ctrl+Shift+A", () => {
+	const { commands, events, shortcuts } = register();
 	assert.deepEqual([...commands.keys()].sort(), ["app"]);
+	assert.deepEqual([...shortcuts.keys()], ["ctrl+shift+a"]);
 	assert.deepEqual([...events.keys()].sort(), ["session_shutdown", "session_start"]);
+});
+
+test("Ctrl+Shift+A opens the project dashboard", async (t) => {
+	const stub = withStub(t);
+	const { shortcuts } = register();
+	let opened = false;
+	const { ctx } = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [(component) => {
+			opened = true;
+			component.handleInput("tui.select.cancel");
+		}],
+	});
+
+	await shortcuts.get("ctrl+shift+a")!(ctx);
+	assert.equal(opened, true);
 });
 
 test("formatAppStatus hides zero apps and reports attached clients", () => {

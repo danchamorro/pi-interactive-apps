@@ -42,7 +42,7 @@ pi -e /path/to/pi-interactive-apps
 
 3. Press `Escape` to return to Pi. The footer now shows `apps 1`.
 
-4. Later, type `/app`, select lazygit, and press `Enter` to jump back in exactly where you left it.
+4. Later, press `Ctrl+Shift+A`, select lazygit, and press `Enter` to jump back in exactly where you left it.
 
 ## The three ways to run `/app`
 
@@ -51,6 +51,8 @@ pi -e /path/to/pi-interactive-apps
 | `/app <command>` | Starts the command in the current project and attaches to it right away. |
 | `/app` | Opens the dashboard for the current project, without starting anything. |
 | `/app --all` | Opens a global dashboard with apps from every project, grouped by directory. |
+
+Press `Ctrl+Shift+A` at any time to open the current project's dashboard without changing text in Pi's editor.
 
 Anything you can type in a shell works, including flags and pipes:
 
