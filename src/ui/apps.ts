@@ -68,6 +68,7 @@ export class AppDashboard implements Component {
 	private view: AppManagerView;
 	private selection: DashboardSelection;
 	private done: (value: AppAction | null) => void;
+	private allProjects: boolean;
 
 	private closed = false;
 	private ticker: ReturnType<typeof setInterval>;
@@ -80,6 +81,7 @@ export class AppDashboard implements Component {
 		view: AppManagerView,
 		selection: DashboardSelection,
 		done: (value: AppAction | null) => void,
+		allProjects = false,
 	) {
 		this.tui = tui;
 		this.theme = theme;
@@ -87,6 +89,7 @@ export class AppDashboard implements Component {
 		this.view = view;
 		this.selection = selection;
 		this.done = done;
+		this.allProjects = allProjects;
 		// Live refresh at 1Hz; the subscription only fires on real change,
 		// so identical polls do not trigger redraws.
 		this.ticker = setInterval(() => {
@@ -180,9 +183,12 @@ export class AppDashboard implements Component {
 		const lines: string[] = [];
 
 		const headerLeft = theme.fg("accent", theme.bold("Interactive apps"));
+		const projectCount = new Set(sessions.map((session) => session.cwd)).size;
 		const headerRight = theme.fg(
 			"muted",
-			`${sessions.length} app${sessions.length === 1 ? "" : "s"} in this project`,
+			this.allProjects
+				? `${sessions.length} app${sessions.length === 1 ? "" : "s"} across ${projectCount} project${projectCount === 1 ? "" : "s"}`
+				: `${sessions.length} app${sessions.length === 1 ? "" : "s"} in this project`,
 		);
 		const headerPad = Math.max(
 			1,
@@ -236,22 +242,45 @@ export class AppDashboard implements Component {
 		height: number,
 	): string[] {
 		const theme = this.theme;
-		const out: string[] = [];
-
-		let start = 0;
-		if (sessions.length > height) {
-			start = Math.min(
-				Math.max(0, this.selection.index - Math.floor(height / 2)),
-				sessions.length - height,
-			);
+		const rows: Array<
+			| { cwd: string }
+			| { session: AppSession; sessionIndex: number }
+		> = [];
+		let previousCwd: string | undefined;
+		for (let sessionIndex = 0; sessionIndex < sessions.length; sessionIndex++) {
+			const session = sessions[sessionIndex];
+			if (this.allProjects && session.cwd !== previousCwd) {
+				rows.push({ cwd: session.cwd });
+				previousCwd = session.cwd;
+			}
+			rows.push({ session, sessionIndex });
 		}
-		const visible = sessions.slice(start, start + height);
 
-		for (let i = 0; i < visible.length; i++) {
-			const snap = visible[i];
-			const index = start + i;
-			const isSelected = index === this.selection.index;
+		const selectedRow = Math.max(
+			0,
+			rows.findIndex(
+				(row) =>
+					"sessionIndex" in row && row.sessionIndex === this.selection.index,
+			),
+		);
+		const start =
+			rows.length > height
+				? Math.min(
+						Math.max(0, selectedRow - Math.floor(height / 2)),
+						rows.length - height,
+					)
+				: 0;
+		const visible = rows.slice(start, start + height);
+		const out = visible.map((row) => {
+			if ("cwd" in row) {
+				return truncateToWidth(
+					theme.fg("dim", `  ${oneLine(row.cwd)}`),
+					width,
+				);
+			}
 
+			const { session: snap, sessionIndex } = row;
+			const isSelected = sessionIndex === this.selection.index;
 			const marker = isSelected ? theme.fg("accent", "❯") : " ";
 			const glyph =
 				snap.attached > 0
@@ -261,29 +290,28 @@ export class AppDashboard implements Component {
 				? theme.fg("accent", oneLine(snap.label))
 				: theme.fg("text", oneLine(snap.label));
 			const left = ` ${marker} ${glyph} ${label} ${theme.fg("dim", snap.id)}`;
-
 			const dot = theme.fg("dim", " · ");
-			const rightParts = [
+			const right = `${[
 				theme.fg("muted", formatAge(snap.createdAt)),
 				snap.attached > 0
 					? theme.fg("success", "attached")
 					: theme.fg("muted", "detached"),
-			];
-			const right = `${rightParts.join(dot)} `;
-
+			].join(dot)} `;
 			const rightWidth = visibleWidth(right);
-			const leftMax = Math.max(0, width - rightWidth - 2);
-			const leftTruncated = truncateToWidth(left, leftMax);
+			const leftTruncated = truncateToWidth(
+				left,
+				Math.max(0, width - rightWidth - 2),
+			);
 			const gap = Math.max(2, width - visibleWidth(leftTruncated) - rightWidth);
-			out.push(truncateToWidth(leftTruncated + " ".repeat(gap) + right, width));
-		}
+			return truncateToWidth(leftTruncated + " ".repeat(gap) + right, width);
+		});
 
 		if (start > 0) {
 			out[0] = truncateToWidth(theme.fg("dim", `   ... ${start} more`), width);
 		}
-		if (start + height < sessions.length) {
+		if (start + height < rows.length) {
 			out[out.length - 1] = truncateToWidth(
-				theme.fg("dim", `   ... ${sessions.length - start - height} more`),
+				theme.fg("dim", `   ... ${rows.length - start - height} more`),
 				width,
 			);
 		}

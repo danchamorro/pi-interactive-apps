@@ -12,7 +12,8 @@ https://github.com/user-attachments/assets/2170da3e-352b-4fd0-913b-ed4f6ce0bb54
 - Attaches immediately with full terminal input.
 - Detaches with `Ctrl+B`, then `D`, without stopping the app.
 - Reopens detached apps from a full-screen `/app` dashboard.
-- Shows only apps started from the current project's canonical directory.
+- Keeps `/app` scoped to the current project's canonical directory.
+- Groups every managed app by canonical project directory with `/app --all`.
 - Keeps apps alive across Pi reloads, session changes, and Pi exits.
 - Shows the current project's app count in Pi's footer.
 - Keeps `/tode` as an alias for `/app tode .`.
@@ -51,11 +52,19 @@ Start and attach to an app:
 
 Inside the app, press `Ctrl+B`, then `D` to detach and return to the dashboard.
 
-Open the dashboard without starting another app:
+Open the current project's dashboard without starting another app:
 
 ```text
 /app
 ```
+
+Open the global dashboard, grouped by canonical project directory:
+
+```text
+/app --all
+```
+
+`Enter` attaches to the selected app and confirmed `x` stops it, including apps in other project groups.
 
 | Key | Action |
 | --- | --- |
@@ -64,7 +73,7 @@ Open the dashboard without starting another app:
 | `x` | Ask to stop the app |
 | `Escape` | Return to Pi |
 
-The footer shows `apps 2` when two detached apps are running. It shows `apps 2 · 1 attached` when one has an attached tmux client. The status is hidden when the current project has no apps.
+The footer remains current-project only. It shows `apps 2` when two detached apps are running and `apps 2 · 1 attached` when one has an attached tmux client. The status is hidden when the current project has no apps.
 
 ## Persistence and recovery
 

@@ -200,6 +200,20 @@ test("sessions are filtered by canonical project cwd", () => {
 	assert.deepEqual(managerB.list().map((s) => s.id), [b.id]);
 });
 
+test("all-project managers discover and order valid sessions from every cwd", () => {
+	const server = fakeServer();
+	const managerZ = new AppManager("/tmp/z", server.run);
+	const managerA = new AppManager("/tmp/a", server.run);
+	const z = managerZ.start("btop");
+	const a = managerA.start("lazygit");
+	const all = AppManager.all("/tmp/unused", server.run);
+
+	all.refresh();
+	assert.deepEqual(managerZ.list().map((session) => session.id), [z.id]);
+	assert.deepEqual(managerA.list().map((session) => session.id), [a.id]);
+	assert.deepEqual(all.list(), [a, z]);
+});
+
 test("a fresh manager instance rediscovers existing sessions", () => {
 	const server = fakeServer();
 	const first = new AppManager("/tmp", server.run);
@@ -213,10 +227,14 @@ test("a fresh manager instance rediscovers existing sessions", () => {
 
 test("no private server means an empty list, not an error", () => {
 	const server = fakeServer();
-	const manager = new AppManager("/tmp", server.run);
-	manager.refresh();
-	assert.deepEqual(manager.list(), []);
-	assert.equal(manager.size(), 0);
+	for (const manager of [
+		new AppManager("/tmp", server.run),
+		AppManager.all("/tmp", server.run),
+	]) {
+		manager.refresh();
+		assert.deepEqual(manager.list(), []);
+		assert.equal(manager.size(), 0);
+	}
 });
 
 test("foreign, malformed, and other-project rows are hidden", () => {
@@ -246,13 +264,37 @@ test("foreign, malformed, and other-project rows are hidden", () => {
 	]);
 });
 
-test("a genuine list failure throws a bounded error", () => {
-	const manager = new AppManager("/tmp", () => ({
-		status: 1,
-		stdout: "",
-		stderr: "server exploded",
+test("global listing still hides foreign and malformed rows", () => {
+	const cwd = canonicalCwd("/tmp");
+	const other = canonicalCwd("/elsewhere");
+	const rows = [
+		`user-session\t100\t1\t${encode(cwd)}\t${encode("vim")}`,
+		`pi-app-invalid\t100\t0\t${encode(cwd)}\t${encode("bad-id")}`,
+		`pi-app-00000001\t100\t0\tnot!base64\t${encode("bad-meta")}`,
+		`pi-app-00000002\tNaN\t0\t${encode(cwd)}\t${encode("bad-time")}`,
+		`pi-app-00000003\t200\t1\t${encode(other)}\t${encode("good")}`,
+	];
+	const manager = AppManager.all("/tmp", () => ({
+		status: 0,
+		stdout: `${rows.join("\n")}\n`,
+		stderr: "",
 	}));
-	assert.throws(() => manager.refresh(), /server exploded/);
+	manager.refresh();
+	assert.deepEqual(manager.list(), [
+		{
+			id: "pi-app-00000003",
+			label: "good",
+			cwd: other,
+			createdAt: 200_000,
+			attached: 1,
+		},
+	]);
+});
+
+test("a genuine list failure throws a bounded error", () => {
+	const run = () => ({ status: 1, stdout: "", stderr: "server exploded" });
+	assert.throws(() => new AppManager("/tmp", run).refresh(), /server exploded/);
+	assert.throws(() => AppManager.all("/tmp", run).refresh(), /server exploded/);
 });
 
 test("subscribers are notified on change and not on identical refreshes", () => {
@@ -271,6 +313,23 @@ test("subscribers are notified on change and not on identical refreshes", () => 
 });
 
 // --- Kill --------------------------------------------------------------------
+
+test("global kill removes a known session from another project", () => {
+	const server = fakeServer();
+	const local = new AppManager("/tmp/local", server.run).start("btop");
+	const foreign = new AppManager("/tmp/foreign", server.run).start("lazygit");
+	const all = AppManager.all("/tmp/local", server.run);
+	all.refresh();
+
+	assert.throws(() => all.kill("pi-app-ffffffff"), /Unknown app session/);
+	assert.throws(() => all.kill("not-an-app"), /Unknown app session/);
+	assert.ok(!server.calls.some((call) => call.includes("=pi-app-ffffffff")));
+	assert.ok(!server.calls.some((call) => call.includes("=not-an-app")));
+	all.kill(foreign.id);
+	assert.deepEqual(all.list().map((session) => session.id), [local.id]);
+	assert.ok(server.sessions.has(local.id));
+	assert.ok(!server.sessions.has(foreign.id));
+});
 
 test("kill removes a known session and validates ids first", () => {
 	const server = fakeServer();

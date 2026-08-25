@@ -101,6 +101,7 @@ function makeCtx(options: {
 	const tuiEvents: string[] = [];
 	const scripts = options.scripts ?? [];
 	const confirms = options.confirms ?? [];
+	const confirmationPrompts: Array<{ title: string; message: string }> = [];
 	const theme = {
 		fg: (_c: string, text: string) => text,
 		bold: (text: string) => text,
@@ -126,7 +127,10 @@ function makeCtx(options: {
 				statuses.push({ key, text }),
 			notify: (message: string, type?: string) =>
 				notifications.push(`${type ?? "info"}:${message}`),
-			confirm: async () => confirms.shift() ?? false,
+			confirm: async (title: string, message: string) => {
+				confirmationPrompts.push({ title, message });
+				return confirms.shift() ?? false;
+			},
 			custom: (factory: never, customOptions?: { overlay?: boolean }) =>
 				new Promise((resolve) => {
 					let component: { dispose?: () => void } | undefined;
@@ -155,7 +159,7 @@ function makeCtx(options: {
 				}),
 		},
 	};
-	return { ctx, notifications, statuses, tuiEvents };
+	return { ctx, notifications, statuses, tuiEvents, confirmationPrompts };
 }
 
 function withStub(t: { after(fn: () => void): void }) {
@@ -209,13 +213,15 @@ function seedSession(
 	id: string,
 	label: string,
 	attached = 0,
+	cwd = stub.projectDir,
 ) {
 	stub.seed({
+		...stub.state(),
 		[id]: {
 			created: 1700000100,
 			attached,
 			opts: {
-				"@pi_app_cwd": Buffer.from(stub.projectDir, "utf8").toString("base64url"),
+				"@pi_app_cwd": Buffer.from(cwd, "utf8").toString("base64url"),
 				"@pi_app_label": Buffer.from(label, "utf8").toString("base64url"),
 			},
 		},
@@ -243,6 +249,7 @@ test("the footer tracks current-project apps and clears on shutdown", async (t) 
 	t.mock.timers.enable({ apis: ["setInterval"] });
 	const stub = withStub(t);
 	seedSession(stub, "pi-app-00000001", "lazygit", 1);
+	seedSession(stub, "pi-app-00000002", "btop", 0, "/another/project");
 	const { events } = register();
 	const { ctx, statuses } = makeCtx({ cwd: stub.projectDir });
 
@@ -306,6 +313,23 @@ test("/app <command> starts, attaches, and re-enters the dashboard", async (t) =
 	);
 });
 
+test("only the exact trimmed --all token opens the global dashboard", async (t) => {
+	const stub = withStub(t);
+	const { commands } = register();
+	const empty = makeCtx({ cwd: stub.projectDir });
+	await commands.get("app")!("  --all  ", empty.ctx);
+	assert.match(empty.notifications[0], /No interactive apps are running/);
+	assert.ok(!stub.log().some((argv) => argv[2] === "new-session"));
+
+	const command = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [(c) => c.handleInput("tui.select.cancel")],
+	});
+	await commands.get("app")!("--all now", command.ctx);
+	const create = stub.log().find((argv) => argv[2] === "new-session");
+	assert.ok(create?.includes("PI_APP_COMMAND=--all now"));
+});
+
 test("/tode is an alias for /app tode .", async (t) => {
 	const stub = withStub(t);
 	const { commands } = register();
@@ -335,6 +359,69 @@ test("enter on a dashboard row attaches to that session", async (t) => {
 	assert.ok(attach);
 	assert.equal(attach[attach.indexOf("-t") + 1], "=pi-app-00000001");
 	assert.deepEqual(tuiEvents, ["stop", "start", "render:force"]);
+});
+
+test("the global dashboard attaches to foreign apps and reopens", async (t) => {
+	const stub = withStub(t);
+	seedSession(stub, "pi-app-00000001", "lazygit", 0, "/another/project");
+	const { commands } = register();
+	const { ctx, tuiEvents } = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [
+			(c) => c.handleInput("tui.select.confirm"),
+			(c) => c.handleInput("tui.select.cancel"),
+		],
+	});
+	await commands.get("app")!("--all", ctx);
+	const log = stub.log();
+	assert.ok(!log.some((argv) => argv[2] === "new-session"));
+	const attach = log.find((argv) => argv[2] === "attach-session");
+	assert.equal(attach?.[attach.indexOf("-t") + 1], "=pi-app-00000001");
+	assert.deepEqual(tuiEvents, ["stop", "start", "render:force"]);
+});
+
+test("the global dashboard confirms foreign cwd before stopping", async (t) => {
+	const stub = withStub(t);
+	const foreignCwd = "/another/project";
+	seedSession(stub, "pi-app-00000001", "same", 0, foreignCwd);
+	const { commands } = register();
+
+	const cancelled = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [
+			(c) => c.handleInput("x"),
+			(c) => c.handleInput("tui.select.cancel"),
+		],
+		confirms: [false],
+	});
+	await commands.get("app")!("--all", cancelled.ctx);
+	assert.ok(stub.state()["pi-app-00000001"]);
+	assert.match(cancelled.confirmationPrompts[0].message, /same.*\/another\/project/);
+
+	const confirmed = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [(c) => c.handleInput("x")],
+		confirms: [true],
+	});
+	await commands.get("app")!("--all", confirmed.ctx);
+	assert.deepEqual(stub.state(), {});
+	assert.match(confirmed.notifications.at(-1) ?? "", /No interactive apps are running/);
+});
+
+test("the global dashboard reports when all apps exit during refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["setInterval"] });
+	const stub = withStub(t);
+	seedSession(stub, "pi-app-00000001", "btop", 0, "/another/project");
+	const { commands } = register();
+	const { ctx, notifications } = makeCtx({
+		cwd: stub.projectDir,
+		scripts: [() => {
+			stub.seed({});
+			t.mock.timers.tick(1000);
+		}],
+	});
+	await commands.get("app")!("--all", ctx);
+	assert.match(notifications.at(-1) ?? "", /All interactive apps have exited/);
 });
 
 test("x kills only after confirmation", async (t) => {

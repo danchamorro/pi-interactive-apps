@@ -4,8 +4,9 @@
  * `/app <command>` starts an arbitrary terminal command inside a private
  * tmux server (`tmux -L pi-apps`) scoped to the current project, attaches
  * immediately, and drops into a /ps-style dashboard after `Ctrl+B D`
- * detaches. `/app` alone opens the dashboard. Sessions intentionally
- * survive Pi reload and exit. The session_shutdown handler stops only the
+ * detaches. `/app` opens the project dashboard, while `/app --all` groups
+ * apps from every project. Sessions intentionally survive Pi reload and exit.
+ * The session_shutdown handler stops only the
  * footer poll; it never cleans up tmux sessions.
  */
 
@@ -88,12 +89,15 @@ async function dashboardLoop(
 	ctx: ExtensionContext,
 	manager: AppManager,
 	selection: DashboardSelection,
+	allProjects = false,
 ): Promise<void> {
 	while (true) {
 		manager.refresh();
 		if (manager.size() === 0) {
 			ctx.ui.notify(
-				"No interactive apps in this project. Start one with /app <command>.",
+				allProjects
+					? "No interactive apps are running. Start one with /app <command>."
+					: "No interactive apps in this project. Start one with /app <command>.",
 				"info",
 			);
 			return;
@@ -101,7 +105,15 @@ async function dashboardLoop(
 
 		const action = await ctx.ui.custom<AppAction | null>(
 			(tui, theme, keybindings, done) =>
-				new AppDashboard(tui, theme, keybindings, manager, selection, done),
+				new AppDashboard(
+					tui,
+					theme,
+					keybindings,
+					manager,
+					selection,
+					done,
+					allProjects,
+				),
 			{
 				overlay: true,
 				overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -112,7 +124,9 @@ async function dashboardLoop(
 			// Escape, or the dashboard auto-closed because every app exited.
 			if (manager.size() === 0) {
 				ctx.ui.notify(
-					"All interactive apps in this project have exited.",
+					allProjects
+						? "All interactive apps have exited."
+						: "All interactive apps in this project have exited.",
 					"info",
 				);
 			}
@@ -130,7 +144,7 @@ async function dashboardLoop(
 		if (!snap) continue;
 		const confirmed = await ctx.ui.confirm(
 			"Stop app",
-			`Stop "${snap.label}" (${snap.id})? Unsaved work in it will be lost.`,
+			`Stop "${snap.label}" (${snap.id})${allProjects ? ` in ${snap.cwd}` : ""}? Unsaved work in it will be lost.`,
 		);
 		if (confirmed) {
 			try {
@@ -153,15 +167,18 @@ async function runApp(ctx: ExtensionContext, args: string): Promise<void> {
 		return;
 	}
 
-	const manager = new AppManager(ctx.cwd);
+	const allProjects = command === "--all";
+	const manager = allProjects
+		? AppManager.all(ctx.cwd)
+		: new AppManager(ctx.cwd);
 	const selection: DashboardSelection = { index: 0 };
 	try {
-		if (command) {
+		if (command && !allProjects) {
 			const session = manager.start(command);
 			selection.id = session.id;
 			await attachTo(ctx, manager, session.id);
 		}
-		await dashboardLoop(ctx, manager, selection);
+		await dashboardLoop(ctx, manager, selection, allProjects);
 	} catch (error) {
 		notifyError(ctx, error);
 	}
@@ -205,7 +222,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand("app", {
 		description:
-			"Start or manage persistent interactive apps (/app <command>, /app for the dashboard)",
+			"Start or manage persistent interactive apps (/app <command>, /app, or /app --all)",
 		handler: (args, ctx) => runApp(ctx, args ?? ""),
 	});
 

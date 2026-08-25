@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 - 2026-08-24
+
+- Add `/app --all`, a global dashboard grouped by canonical project directory.
+
 ## 0.1.1 - 2026-08-24
 
 - Add the 25-second demo video and README link.

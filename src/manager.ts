@@ -1,6 +1,6 @@
 /**
- * AppManager — project-filtered registry of persistent interactive app
- * sessions backed by a private tmux server (`tmux -L pi-apps`).
+ * AppManager registry of persistent interactive app sessions backed by a
+ * private tmux server (`tmux -L pi-apps`), with project and global views.
  *
  * Every tmux invocation is synchronous (spawnSync) and built as argv — user
  * input is never concatenated into a shell command. The user's command
@@ -108,17 +108,23 @@ function defaultRunner(args: string[]): TmuxResult {
 const NO_SERVER_RE = /no server running|No such file or directory|error connecting/i;
 const NO_SESSION_RE = /can't find session|session not found|no such session/i;
 
-/** Synchronous read model + lifecycle operations for one project's apps. */
+/** Synchronous read model and lifecycle operations for managed apps. */
 export class AppManager {
 	readonly cwd: string;
 	private readonly run: TmuxRunner;
+	private readonly allProjects: boolean;
 	private snapshots: AppSession[] = [];
 	private lastKey = "";
 	private readonly listeners = new Set<() => void>();
 
-	constructor(cwd: string, runner: TmuxRunner = defaultRunner) {
+	constructor(cwd: string, runner: TmuxRunner = defaultRunner, allProjects = false) {
 		this.cwd = canonicalCwd(cwd);
 		this.run = runner;
+		this.allProjects = allProjects;
+	}
+
+	static all(cwd: string, runner: TmuxRunner = defaultRunner): AppManager {
+		return new AppManager(cwd, runner, true);
 	}
 
 	private exec(args: string[]): TmuxResult {
@@ -214,7 +220,12 @@ export class AppManager {
 		} else {
 			next = this.parse(result.stdout);
 		}
-		next.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+		next.sort(
+			(a, b) =>
+				(this.allProjects ? a.cwd.localeCompare(b.cwd) : 0) ||
+				a.createdAt - b.createdAt ||
+				a.id.localeCompare(b.id),
+		);
 		const key = JSON.stringify(next);
 		if (key === this.lastKey) return;
 		this.lastKey = key;
@@ -242,7 +253,7 @@ export class AppManager {
 			const cwd = decodeMeta(cwdRaw);
 			const label = decodeMeta(labelRaw);
 			if (!cwd || !label) continue; // malformed metadata → hide, not crash
-			if (cwd !== this.cwd) continue; // other project
+			if (!this.allProjects && cwd !== this.cwd) continue; // other project
 			sessions.push({
 				id: name,
 				label,

@@ -127,6 +127,7 @@ const keybindings = {
 function makeDashboard(
 	sessions: AppSession[],
 	selection: DashboardSelection = { index: 0 },
+	allProjects = false,
 ) {
 	const server = fakeView(sessions);
 	const results: Array<AppAction | null> = [];
@@ -138,6 +139,7 @@ function makeDashboard(
 		server.view,
 		selection,
 		(value) => results.push(value),
+		allProjects,
 	);
 	return { dashboard, server, results, selection, renders };
 }
@@ -187,6 +189,29 @@ test("j/k navigation wraps and keeps the selected id stable", () => {
 	server.set([sessions[0], sessions[1]]);
 	dashboard.handleInput("tui.select.confirm");
 	dashboard.dispose();
+});
+
+test("global rendering groups projects while navigation targets only sessions", () => {
+	const sessions = [
+		session("pi-app-aaaaaaaa", { label: "same", cwd: "/a/project" }),
+		session("pi-app-bbbbbbbb", { label: "same", cwd: "/z/project\nname" }),
+	];
+	const { dashboard, results } = makeDashboard(sessions, { index: 0 }, true);
+	const rendered = dashboard.render(120).join("\n");
+	assert.match(rendered, /2 apps across 2 projects/);
+	assert.match(rendered, /\/a\/project/);
+	assert.match(rendered, /\/z\/project name/);
+
+	dashboard.handleInput("tui.select.down");
+	dashboard.handleInput("tui.select.confirm");
+	assert.deepEqual(results, [{ type: "attach", id: "pi-app-bbbbbbbb" }]);
+	dashboard.dispose();
+
+	const stop = makeDashboard(sessions, { index: 0 }, true);
+	stop.dashboard.handleInput("j");
+	stop.dashboard.handleInput("x");
+	assert.deepEqual(stop.results, [{ type: "kill", id: "pi-app-bbbbbbbb" }]);
+	stop.dashboard.dispose();
 });
 
 test("the refresh timer polls, auto-closes when empty, and stops on dispose", (t) => {
@@ -239,6 +264,23 @@ test("rendering stays inside narrow widths and fixed height", () => {
 	// Scroll indicators appear when the list overflows the viewport.
 	const flat = dashboard.render(80).join("\n");
 	assert.match(flat, /more/);
+	dashboard.dispose();
+});
+
+test("global grouped overflow keeps a later selected app visible", () => {
+	const many = Array.from({ length: 30 }, (_, i) =>
+		session(`pi-app-${String(i).padStart(8, "0")}`, {
+			cwd: i < 15 ? "/a/project" : "/z/a-very-long-project-directory",
+			label: "a-rather-long-application-label",
+		}),
+	);
+	const { dashboard } = makeDashboard(many, { index: 20 }, true);
+	for (const width of [24, 40, 120]) {
+		const lines = dashboard.render(width);
+		assert.ok(lines.some((line) => line.includes("❯")));
+		assert.match(lines.join("\n"), /more/);
+		for (const line of lines) assert.ok(visibleWidth(line) <= width);
+	}
 	dashboard.dispose();
 });
 
