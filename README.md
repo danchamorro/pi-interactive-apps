@@ -6,7 +6,7 @@ It works by keeping every app in a private tmux server (`tmux -L pi-apps`), so i
 
 ## Demo
 
-https://github.com/user-attachments/assets/2170da3e-352b-4fd0-913b-ed4f6ce0bb54
+https://github.com/user-attachments/assets/42f27ce1-8007-4af2-8018-9442ee771af7
 
 ## Requirements
 
